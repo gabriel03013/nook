@@ -1,0 +1,17 @@
+// Nook database schema
+// Auto-generated from Supabase via `prisma db pull`.
+// DO NOT edit tables/enums manually — change them via SQL migration
+// in Supabase and run `pnpm db:pull` to sync this file.
+
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["postgresqlExtensions"]
+}
+
+datasource db {
+  provider   = "postgresql"
+  url        = env("DATABASE_URL")
+  directUrl  = env("DIRECT_URL")
+  schemas    = ["public", "app"]
+  extensions = [pgcrypto, citext]
+}
