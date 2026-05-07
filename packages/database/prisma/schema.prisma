@@ -11,415 +11,499 @@ datasource db {
   schemas    = ["app", "public"]
 }
 
-/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
-model analytics_events {
-  id         String               @id @default(dbgenerated("app.uuidv7()")) @db.Uuid
-  user_id    String?              @db.Uuid
-  type       analytics_event_type
-  metadata   Json?
-  created_at DateTime             @default(now()) @db.Timestamptz(6)
-  users      users?               @relation(fields: [user_id], references: [id], onUpdate: NoAction)
+// ============================================================================
+// USERS & IDENTITY
+// ============================================================================
 
-  @@index([type, created_at(sort: Desc)], map: "idx_analytics_type_created")
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model User {
+  id        String     @id @db.Uuid
+  email     String?    @unique
+  status    UserStatus @default(ACTIVE)
+  createdAt DateTime   @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime   @default(now()) @map("updated_at") @db.Timestamptz(6)
+  deletedAt DateTime?  @map("deleted_at") @db.Timestamptz(6)
+
+  // owned (1-1 / 1-n)
+  profile                Profile?
+  preferences            UserPreference?
+  listenerAvailability   ListenerAvailability?
+  roles                  UserRole[]
+  checkIns               CheckIn[]
+  diaryEntries           DiaryEntry[]
+  posts                  Post[]
+  comments               Comment[]
+  postReactions          PostReaction[]
+  commentReactions       CommentReaction[]
+  notifications          Notification[]
+  savedItems             SavedItem[]
+  distractionCompletions DistractionCompletion[]
+  analyticsEvents        AnalyticsEvent[]
+  auditLogs              AuditLog[]
+  reportsFiled           Report[]
+  moderationActionsTaken ModerationAction[]
+  circlesCreated         Circle[]
+  circleParticipations   CircleParticipant[]
+  circleMessages         CircleMessage[]
+  supportLettersAuthored SupportLetter[]
+  supportLettersReceived SupportLetterDelivery[]
+
+  // self-referencing via Block
+  blockedBy Block[] @relation("BlockedUser") // people who blocked me
+  blocking  Block[] @relation("BlockerUser") // people I blocked
+
+  // self-referencing via PresenceRequest
+  presenceRequestsMade     PresenceRequest[] @relation("PresenceRequester")
+  presenceRequestsAccepted PresenceRequest[] @relation("PresenceAcceptedBy")
+
+  // self-referencing via UserWarning
+  warnings       UserWarning[] @relation("WarningTarget") // warnings I received
+  warningsIssued UserWarning[] @relation("WarningModerator") // warnings I issued (as a moderator)
+
+  @@index([createdAt(sort: Desc)], map: "idx_users_created_at")
+  @@index([status], map: "idx_users_status")
+  @@map("users")
   @@schema("public")
 }
 
 /// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
 /// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
-model audit_logs {
-  id         String   @id @default(dbgenerated("app.uuidv7()")) @db.Uuid
-  actor_id   String?  @db.Uuid
-  action     String
-  entity     String
-  entity_id  String?  @db.Uuid
-  metadata   Json?
-  ip_address String?
-  user_agent String?
-  created_at DateTime @default(now()) @db.Timestamptz(6)
-  users      users?   @relation(fields: [actor_id], references: [id], onUpdate: NoAction)
+model Profile {
+  id          String   @id @default(dbgenerated("app.uuidv7()")) @db.Uuid
+  userId      String   @unique @map("user_id") @db.Uuid
+  displayName String   @map("display_name")
+  username    String   @unique @db.Citext
+  bio         String?
+  avatarPath  String?  @map("avatar_path")
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime @default(now()) @map("updated_at") @db.Timestamptz(6)
 
-  @@index([action], map: "idx_audit_action")
-  @@index([created_at(sort: Desc)], map: "idx_audit_created")
-  @@index([entity, entity_id], map: "idx_audit_entity")
-  @@schema("public")
-}
-
-/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
-/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
-model blocks {
-  id                             String   @id @default(dbgenerated("app.uuidv7()")) @db.Uuid
-  blocker_id                     String   @db.Uuid
-  blocked_id                     String   @db.Uuid
-  reason                         String?
-  created_at                     DateTime @default(now()) @db.Timestamptz(6)
-  users_blocks_blocked_idTousers users    @relation("blocks_blocked_idTousers", fields: [blocked_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
-  users_blocks_blocker_idTousers users    @relation("blocks_blocker_idTousers", fields: [blocker_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
-
-  @@unique([blocker_id, blocked_id], map: "uq_blocks")
-  @@index([blocked_id], map: "idx_blocks_blocked")
-  @@index([blocker_id], map: "idx_blocks_blocker")
-  @@schema("public")
-}
-
-/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
-/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
-model check_ins {
-  id              String          @id @default(dbgenerated("app.uuidv7()")) @db.Uuid
-  user_id         String          @db.Uuid
-  emotional_state emotional_state
-  need_type       need_type
-  intensity       Int?            @db.SmallInt
-  note            String?
-  created_at      DateTime        @default(now()) @db.Timestamptz(6)
-  users           users           @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
-
-  @@index([emotional_state], map: "idx_check_ins_emotional_state")
-  @@index([need_type], map: "idx_check_ins_need_type")
-  @@index([user_id, created_at(sort: Desc)], map: "idx_check_ins_user_created")
-  @@schema("public")
-}
-
-/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
-/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
-model circle_messages {
-  id         String         @id @default(dbgenerated("app.uuidv7()")) @db.Uuid
-  circle_id  String         @db.Uuid
-  author_id  String         @db.Uuid
-  content    String
-  status     content_status @default(PUBLISHED)
-  created_at DateTime       @default(now()) @db.Timestamptz(6)
-  updated_at DateTime       @default(now()) @db.Timestamptz(6)
-  deleted_at DateTime?      @db.Timestamptz(6)
-  users      users          @relation(fields: [author_id], references: [id], onUpdate: NoAction)
-  circles    circles        @relation(fields: [circle_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
-
-  @@index([author_id, created_at(sort: Desc)], map: "idx_circle_messages_author")
-  @@index([circle_id, created_at], map: "idx_circle_messages_circle_created")
-  @@index([status], map: "idx_circle_messages_status")
-  @@schema("public")
-}
-
-/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
-/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
-model circle_participants {
-  id        String                  @id @default(dbgenerated("app.uuidv7()")) @db.Uuid
-  circle_id String                  @db.Uuid
-  user_id   String                  @db.Uuid
-  role      circle_participant_role @default(PARTICIPANT)
-  joined_at DateTime                @default(now()) @db.Timestamptz(6)
-  left_at   DateTime?               @db.Timestamptz(6)
-  circles   circles                 @relation(fields: [circle_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
-  users     users                   @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
-
-  @@unique([circle_id, user_id], map: "uq_circle_participants")
-  @@index([circle_id], map: "idx_circle_participants_circle")
-  @@index([role], map: "idx_circle_participants_role")
-  @@index([user_id], map: "idx_circle_participants_user")
-  @@schema("public")
-}
-
-/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
-/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
-model circles {
-  id                  String                @id @default(dbgenerated("app.uuidv7()")) @db.Uuid
-  title               String
-  description         String?
-  theme               String?
-  status              circle_status         @default(SCHEDULED)
-  max_participants    Int                   @default(12) @db.SmallInt
-  starts_at           DateTime?             @db.Timestamptz(6)
-  ends_at             DateTime?             @db.Timestamptz(6)
-  current_step        String?
-  created_by_id       String?               @db.Uuid
-  created_at          DateTime              @default(now()) @db.Timestamptz(6)
-  updated_at          DateTime              @default(now()) @db.Timestamptz(6)
-  circle_messages     circle_messages[]
-  circle_participants circle_participants[]
-  users               users?                @relation(fields: [created_by_id], references: [id], onUpdate: NoAction)
-
-  @@index([created_at(sort: Desc)], map: "idx_circles_created")
-  @@index([status, starts_at], map: "idx_circles_status_starts")
-  @@schema("public")
-}
-
-/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
-model comment_reactions {
-  id         String        @id @default(dbgenerated("app.uuidv7()")) @db.Uuid
-  user_id    String        @db.Uuid
-  comment_id String        @db.Uuid
-  type       reaction_type
-  created_at DateTime      @default(now()) @db.Timestamptz(6)
-  comments   comments      @relation(fields: [comment_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
-  users      users         @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
-
-  @@unique([user_id, comment_id, type], map: "uq_comment_reactions")
-  @@index([comment_id], map: "idx_comment_reactions_comment")
-  @@index([user_id], map: "idx_comment_reactions_user")
-  @@schema("public")
-}
-
-/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
-/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
-model comments {
-  id                String                @id @default(dbgenerated("app.uuidv7()")) @db.Uuid
-  post_id           String                @db.Uuid
-  author_id         String                @db.Uuid
-  content           String
-  response_type     comment_response_type
-  anonymous         Boolean               @default(false)
-  status            content_status        @default(PUBLISHED)
-  created_at        DateTime              @default(now()) @db.Timestamptz(6)
-  updated_at        DateTime              @default(now()) @db.Timestamptz(6)
-  deleted_at        DateTime?             @db.Timestamptz(6)
-  comment_reactions comment_reactions[]
-  users             users                 @relation(fields: [author_id], references: [id], onUpdate: NoAction)
-  posts             posts                 @relation(fields: [post_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
-
-  @@index([author_id, created_at(sort: Desc)], map: "idx_comments_author_created")
-  @@index([post_id, created_at], map: "idx_comments_post_created")
-  @@index([response_type], map: "idx_comments_response_type")
-  @@index([status, created_at(sort: Desc)], map: "idx_comments_status_created")
-  @@schema("public")
-}
-
-/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
-/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
-model content_flags {
-  id          String             @id @default(dbgenerated("app.uuidv7()")) @db.Uuid
-  target_type report_target_type
-  target_id   String             @db.Uuid
-  flag_type   String
-  risk_level  risk_level
-  source      String
-  status      report_status      @default(OPEN)
-  metadata    Json?
-  created_at  DateTime           @default(now()) @db.Timestamptz(6)
-  updated_at  DateTime           @default(now()) @db.Timestamptz(6)
-
-  @@index([risk_level, status, created_at(sort: Desc)], map: "idx_flags_queue")
-  @@index([source], map: "idx_flags_source")
-  @@index([target_type, target_id], map: "idx_flags_target")
-  @@schema("public")
-}
-
-/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
-/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
-model diary_entries {
-  id                   String           @id @default(dbgenerated("app.uuidv7()")) @db.Uuid
-  user_id              String           @db.Uuid
-  content              String
-  mood                 emotional_state?
-  tags                 String[]         @default([])
-  converted_to_post_id String?          @db.Uuid
-  created_at           DateTime         @default(now()) @db.Timestamptz(6)
-  updated_at           DateTime         @default(now()) @db.Timestamptz(6)
-  deleted_at           DateTime?        @db.Timestamptz(6)
-  posts                posts?           @relation(fields: [converted_to_post_id], references: [id], onUpdate: NoAction)
-  users                users            @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
-
-  @@index([tags], map: "idx_diary_tags", type: Gin)
-  @@index([user_id, created_at(sort: Desc)], map: "idx_diary_user_created")
-  @@schema("public")
-}
-
-/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
-model distraction_completions {
-  id                  String              @id @default(dbgenerated("app.uuidv7()")) @db.Uuid
-  user_id             String              @db.Uuid
-  prompt_id           String              @db.Uuid
-  helped              Boolean?
-  created_at          DateTime            @default(now()) @db.Timestamptz(6)
-  distraction_prompts distraction_prompts @relation(fields: [prompt_id], references: [id], onUpdate: NoAction)
-  users               users               @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
-
-  @@index([prompt_id], map: "idx_distraction_completions_prompt")
-  @@index([user_id, created_at(sort: Desc)], map: "idx_distraction_completions_user")
-  @@schema("public")
-}
-
-/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
-/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
-model distraction_prompts {
-  id                      String                    @id @default(dbgenerated("app.uuidv7()")) @db.Uuid
-  title                   String                    @unique(map: "uq_distraction_prompts_title")
-  description             String
-  category                String
-  estimated_minutes       Int?                      @db.SmallInt
-  active                  Boolean                   @default(true)
-  created_at              DateTime                  @default(now()) @db.Timestamptz(6)
-  updated_at              DateTime                  @default(now()) @db.Timestamptz(6)
-  distraction_completions distraction_completions[]
-
-  @@schema("public")
-}
-
-/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
-/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
-model listener_availabilities {
-  id                  String    @id @default(dbgenerated("app.uuidv7()")) @db.Uuid
-  user_id             String    @unique @db.Uuid
-  available           Boolean   @default(false)
-  topics              String[]  @default([])
-  max_active_requests Int       @default(1) @db.SmallInt
-  last_seen_at        DateTime? @db.Timestamptz(6)
-  updated_at          DateTime  @default(now()) @db.Timestamptz(6)
-  users               users     @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
-
-  @@index([topics], map: "idx_listener_topics", type: Gin)
-  @@index([updated_at(sort: Desc)], map: "idx_listener_updated")
-  @@schema("public")
-}
-
-/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
-/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
-model moderation_actions {
-  id           String                 @id @default(dbgenerated("app.uuidv7()")) @db.Uuid
-  moderator_id String                 @db.Uuid
-  target_type  report_target_type
-  target_id    String                 @db.Uuid
-  action       moderation_action_type
-  reason       String?
-  report_id    String?                @db.Uuid
-  metadata     Json?
-  created_at   DateTime               @default(now()) @db.Timestamptz(6)
-  users        users                  @relation(fields: [moderator_id], references: [id], onUpdate: NoAction)
-  reports      reports?               @relation(fields: [report_id], references: [id], onUpdate: NoAction)
-
-  @@index([action], map: "idx_mod_actions_action")
-  @@index([moderator_id, created_at(sort: Desc)], map: "idx_mod_actions_moderator")
-  @@index([target_type, target_id], map: "idx_mod_actions_target")
-  @@schema("public")
-}
-
-/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
-/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
-model notifications {
-  id         String            @id @default(dbgenerated("app.uuidv7()")) @db.Uuid
-  user_id    String            @db.Uuid
-  type       notification_type
-  title      String
-  body       String?
-  read       Boolean           @default(false)
-  data       Json?
-  created_at DateTime          @default(now()) @db.Timestamptz(6)
-  read_at    DateTime?         @db.Timestamptz(6)
-  users      users             @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
-
-  @@index([type], map: "idx_notif_type")
-  @@index([user_id, created_at(sort: Desc)], map: "idx_notif_user_all")
-  @@schema("public")
-}
-
-/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
-model post_reactions {
-  id         String        @id @default(dbgenerated("app.uuidv7()")) @db.Uuid
-  user_id    String        @db.Uuid
-  post_id    String        @db.Uuid
-  type       reaction_type
-  created_at DateTime      @default(now()) @db.Timestamptz(6)
-  posts      posts         @relation(fields: [post_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
-  users      users         @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
-
-  @@unique([user_id, post_id, type], map: "uq_post_reactions")
-  @@index([post_id], map: "idx_post_reactions_post")
-  @@index([user_id], map: "idx_post_reactions_user")
-  @@schema("public")
-}
-
-/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
-/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
-model posts {
-  id                  String           @id @default(dbgenerated("app.uuidv7()")) @db.Uuid
-  author_id           String           @db.Uuid
-  content             String
-  topic               String?
-  intent              post_intent
-  emotional_intensity Int?             @db.SmallInt
-  allow_advice        Boolean          @default(false)
-  anonymous           Boolean          @default(false)
-  status              content_status   @default(PUBLISHED)
-  first_response_at   DateTime?        @db.Timestamptz(6)
-  created_at          DateTime         @default(now()) @db.Timestamptz(6)
-  updated_at          DateTime         @default(now()) @db.Timestamptz(6)
-  deleted_at          DateTime?        @db.Timestamptz(6)
-  comments            comments[]
-  diary_entries       diary_entries[]
-  post_reactions      post_reactions[]
-  users               users            @relation(fields: [author_id], references: [id], onUpdate: NoAction)
-
-  @@index([author_id, created_at(sort: Desc)], map: "idx_posts_author_created")
-  @@index([intent], map: "idx_posts_intent")
-  @@index([status, created_at(sort: Desc)], map: "idx_posts_status_created")
-  @@schema("public")
-}
-
-/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
-/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
-model presence_requests {
-  id                                            String                  @id @default(dbgenerated("app.uuidv7()")) @db.Uuid
-  requester_id                                  String                  @db.Uuid
-  accepted_by_id                                String?                 @db.Uuid
-  status                                        presence_request_status @default(OPEN)
-  need_type                                     need_type
-  topic                                         String?
-  message                                       String?
-  duration_minutes                              Int                     @db.SmallInt
-  expires_at                                    DateTime                @db.Timestamptz(6)
-  accepted_at                                   DateTime?               @db.Timestamptz(6)
-  closed_at                                     DateTime?               @db.Timestamptz(6)
-  created_at                                    DateTime                @default(now()) @db.Timestamptz(6)
-  updated_at                                    DateTime                @default(now()) @db.Timestamptz(6)
-  users_presence_requests_accepted_by_idTousers users?                  @relation("presence_requests_accepted_by_idTousers", fields: [accepted_by_id], references: [id], onUpdate: NoAction)
-  users_presence_requests_requester_idTousers   users                   @relation("presence_requests_requester_idTousers", fields: [requester_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
-
-  @@index([requester_id, created_at(sort: Desc)], map: "idx_presence_requester")
-  @@index([status, created_at(sort: Desc)], map: "idx_presence_status_created")
-  @@schema("public")
-}
-
-/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
-/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
-model profiles {
-  id           String   @id @default(dbgenerated("app.uuidv7()")) @db.Uuid
-  user_id      String   @unique @db.Uuid
-  display_name String
-  username     String   @unique @db.Citext
-  bio          String?
-  avatar_path  String?
-  created_at   DateTime @default(now()) @db.Timestamptz(6)
-  updated_at   DateTime @default(now()) @db.Timestamptz(6)
-  users        users    @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
 
   @@index([username], map: "idx_profiles_username")
+  @@map("profiles")
+  @@schema("public")
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model UserPreference {
+  id                   String   @id @default(dbgenerated("app.uuidv7()")) @db.Uuid
+  userId               String   @unique @map("user_id") @db.Uuid
+  allowAdviceDefault   Boolean  @default(false) @map("allow_advice_default")
+  anonymousByDefault   Boolean  @default(false) @map("anonymous_by_default")
+  showSensitiveTopics  Boolean  @default(true) @map("show_sensitive_topics")
+  receiveNotifications Boolean  @default(true) @map("receive_notifications")
+  createdAt            DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt            DateTime @default(now()) @map("updated_at") @db.Timestamptz(6)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@map("user_preferences")
+  @@schema("public")
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model UserRole {
+  id        String   @id @default(dbgenerated("app.uuidv7()")) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  role      Role
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([userId, role], map: "uq_user_roles_user_role")
+  @@index([role], map: "idx_user_roles_role")
+  @@index([userId], map: "idx_user_roles_user_id")
+  @@map("user_roles")
   @@schema("public")
 }
 
 /// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
 /// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
-model reports {
-  id                 String               @id @default(dbgenerated("app.uuidv7()")) @db.Uuid
-  reporter_id        String               @db.Uuid
-  target_type        report_target_type
-  target_id          String               @db.Uuid
-  reason             String
-  description        String?
-  status             report_status        @default(OPEN)
-  risk_level         risk_level           @default(LOW)
-  created_at         DateTime             @default(now()) @db.Timestamptz(6)
-  updated_at         DateTime             @default(now()) @db.Timestamptz(6)
-  resolved_at        DateTime?            @db.Timestamptz(6)
-  moderation_actions moderation_actions[]
-  users              users                @relation(fields: [reporter_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+model UserWarning {
+  id          String   @id @default(dbgenerated("app.uuidv7()")) @db.Uuid
+  userId      String   @map("user_id") @db.Uuid
+  moderatorId String?  @map("moderator_id") @db.Uuid
+  reason      String
+  message     String?
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
 
-  @@index([status, risk_level, created_at(sort: Desc)], map: "idx_reports_queue")
-  @@index([reporter_id, created_at(sort: Desc)], map: "idx_reports_reporter")
-  @@index([target_type, target_id], map: "idx_reports_target")
+  targetUser User  @relation("WarningTarget", fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  moderator  User? @relation("WarningModerator", fields: [moderatorId], references: [id], onUpdate: NoAction)
+
+  @@index([userId, createdAt(sort: Desc)], map: "idx_warnings_user")
+  @@map("user_warnings")
   @@schema("public")
 }
 
 /// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
 /// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
-model safety_resources {
+model Block {
+  id        String   @id @default(dbgenerated("app.uuidv7()")) @db.Uuid
+  blockerId String   @map("blocker_id") @db.Uuid
+  blockedId String   @map("blocked_id") @db.Uuid
+  reason    String?
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  blocker User @relation("BlockerUser", fields: [blockerId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  blocked User @relation("BlockedUser", fields: [blockedId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([blockerId, blockedId], map: "uq_blocks")
+  @@index([blockedId], map: "idx_blocks_blocked")
+  @@index([blockerId], map: "idx_blocks_blocker")
+  @@map("blocks")
+  @@schema("public")
+}
+
+// ============================================================================
+// CHECK-IN & DIARY
+// ============================================================================
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model CheckIn {
+  id             String         @id @default(dbgenerated("app.uuidv7()")) @db.Uuid
+  userId         String         @map("user_id") @db.Uuid
+  emotionalState EmotionalState @map("emotional_state")
+  needType       NeedType       @map("need_type")
+  intensity      Int?           @db.SmallInt
+  note           String?
+  createdAt      DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([emotionalState], map: "idx_check_ins_emotional_state")
+  @@index([needType], map: "idx_check_ins_need_type")
+  @@index([userId, createdAt(sort: Desc)], map: "idx_check_ins_user_created")
+  @@map("check_ins")
+  @@schema("public")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model DiaryEntry {
+  id                String          @id @default(dbgenerated("app.uuidv7()")) @db.Uuid
+  userId            String          @map("user_id") @db.Uuid
+  content           String
+  mood              EmotionalState?
+  tags              String[]        @default([])
+  convertedToPostId String?         @map("converted_to_post_id") @db.Uuid
+  createdAt         DateTime        @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime        @default(now()) @map("updated_at") @db.Timestamptz(6)
+  deletedAt         DateTime?       @map("deleted_at") @db.Timestamptz(6)
+
+  user            User  @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  convertedToPost Post? @relation(fields: [convertedToPostId], references: [id], onUpdate: NoAction)
+
+  @@index([tags], map: "idx_diary_tags", type: Gin)
+  @@index([userId, createdAt(sort: Desc)], map: "idx_diary_user_created")
+  @@map("diary_entries")
+  @@schema("public")
+}
+
+// ============================================================================
+// POSTS & COMMENTS
+// ============================================================================
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model Post {
+  id                 String        @id @default(dbgenerated("app.uuidv7()")) @db.Uuid
+  authorId           String        @map("author_id") @db.Uuid
+  content            String
+  topic              String?
+  intent             PostIntent
+  emotionalIntensity Int?          @map("emotional_intensity") @db.SmallInt
+  allowAdvice        Boolean       @default(false) @map("allow_advice")
+  anonymous          Boolean       @default(false)
+  status             ContentStatus @default(PUBLISHED)
+  firstResponseAt    DateTime?     @map("first_response_at") @db.Timestamptz(6)
+  createdAt          DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt          DateTime      @default(now()) @map("updated_at") @db.Timestamptz(6)
+  deletedAt          DateTime?     @map("deleted_at") @db.Timestamptz(6)
+
+  author       User           @relation(fields: [authorId], references: [id], onUpdate: NoAction)
+  comments     Comment[]
+  reactions    PostReaction[]
+  diaryEntries DiaryEntry[]
+
+  @@index([authorId, createdAt(sort: Desc)], map: "idx_posts_author_created")
+  @@index([intent], map: "idx_posts_intent")
+  @@index([status, createdAt(sort: Desc)], map: "idx_posts_status_created")
+  @@map("posts")
+  @@schema("public")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model Comment {
+  id           String              @id @default(dbgenerated("app.uuidv7()")) @db.Uuid
+  postId       String              @map("post_id") @db.Uuid
+  authorId     String              @map("author_id") @db.Uuid
+  content      String
+  responseType CommentResponseType @map("response_type")
+  anonymous    Boolean             @default(false)
+  status       ContentStatus       @default(PUBLISHED)
+  createdAt    DateTime            @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt    DateTime            @default(now()) @map("updated_at") @db.Timestamptz(6)
+  deletedAt    DateTime?           @map("deleted_at") @db.Timestamptz(6)
+
+  author    User              @relation(fields: [authorId], references: [id], onUpdate: NoAction)
+  post      Post              @relation(fields: [postId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  reactions CommentReaction[]
+
+  @@index([authorId, createdAt(sort: Desc)], map: "idx_comments_author_created")
+  @@index([postId, createdAt], map: "idx_comments_post_created")
+  @@index([responseType], map: "idx_comments_response_type")
+  @@index([status, createdAt(sort: Desc)], map: "idx_comments_status_created")
+  @@map("comments")
+  @@schema("public")
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model PostReaction {
+  id        String       @id @default(dbgenerated("app.uuidv7()")) @db.Uuid
+  userId    String       @map("user_id") @db.Uuid
+  postId    String       @map("post_id") @db.Uuid
+  type      ReactionType
+  createdAt DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  post Post @relation(fields: [postId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([userId, postId, type], map: "uq_post_reactions")
+  @@index([postId], map: "idx_post_reactions_post")
+  @@index([userId], map: "idx_post_reactions_user")
+  @@map("post_reactions")
+  @@schema("public")
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model CommentReaction {
+  id        String       @id @default(dbgenerated("app.uuidv7()")) @db.Uuid
+  userId    String       @map("user_id") @db.Uuid
+  commentId String       @map("comment_id") @db.Uuid
+  type      ReactionType
+  createdAt DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  comment Comment @relation(fields: [commentId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([userId, commentId, type], map: "uq_comment_reactions")
+  @@index([commentId], map: "idx_comment_reactions_comment")
+  @@index([userId], map: "idx_comment_reactions_user")
+  @@map("comment_reactions")
+  @@schema("public")
+}
+
+// ============================================================================
+// PRESENCE & LISTENERS
+// ============================================================================
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model PresenceRequest {
+  id              String                @id @default(dbgenerated("app.uuidv7()")) @db.Uuid
+  requesterId     String                @map("requester_id") @db.Uuid
+  acceptedById    String?               @map("accepted_by_id") @db.Uuid
+  status          PresenceRequestStatus @default(OPEN)
+  needType        NeedType              @map("need_type")
+  topic           String?
+  message         String?
+  durationMinutes Int                   @map("duration_minutes") @db.SmallInt
+  expiresAt       DateTime              @map("expires_at") @db.Timestamptz(6)
+  acceptedAt      DateTime?             @map("accepted_at") @db.Timestamptz(6)
+  closedAt        DateTime?             @map("closed_at") @db.Timestamptz(6)
+  createdAt       DateTime              @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime              @default(now()) @map("updated_at") @db.Timestamptz(6)
+
+  requester  User  @relation("PresenceRequester", fields: [requesterId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  acceptedBy User? @relation("PresenceAcceptedBy", fields: [acceptedById], references: [id], onUpdate: NoAction)
+
+  @@index([requesterId, createdAt(sort: Desc)], map: "idx_presence_requester")
+  @@index([status, createdAt(sort: Desc)], map: "idx_presence_status_created")
+  @@map("presence_requests")
+  @@schema("public")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model ListenerAvailability {
+  id                String    @id @default(dbgenerated("app.uuidv7()")) @db.Uuid
+  userId            String    @unique @map("user_id") @db.Uuid
+  available         Boolean   @default(false)
+  topics            String[]  @default([])
+  maxActiveRequests Int       @default(1) @map("max_active_requests") @db.SmallInt
+  lastSeenAt        DateTime? @map("last_seen_at") @db.Timestamptz(6)
+  updatedAt         DateTime  @default(now()) @map("updated_at") @db.Timestamptz(6)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([topics], map: "idx_listener_topics", type: Gin)
+  @@index([updatedAt(sort: Desc)], map: "idx_listener_updated")
+  @@map("listener_availabilities")
+  @@schema("public")
+}
+
+// ============================================================================
+// CIRCLES
+// ============================================================================
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model Circle {
+  id              String       @id @default(dbgenerated("app.uuidv7()")) @db.Uuid
+  title           String
+  description     String?
+  theme           String?
+  status          CircleStatus @default(SCHEDULED)
+  maxParticipants Int          @default(12) @map("max_participants") @db.SmallInt
+  startsAt        DateTime?    @map("starts_at") @db.Timestamptz(6)
+  endsAt          DateTime?    @map("ends_at") @db.Timestamptz(6)
+  currentStep     String?      @map("current_step")
+  createdById     String?      @map("created_by_id") @db.Uuid
+  createdAt       DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime     @default(now()) @map("updated_at") @db.Timestamptz(6)
+
+  createdBy    User?               @relation(fields: [createdById], references: [id], onUpdate: NoAction)
+  participants CircleParticipant[]
+  messages     CircleMessage[]
+
+  @@index([createdAt(sort: Desc)], map: "idx_circles_created")
+  @@index([status, startsAt], map: "idx_circles_status_starts")
+  @@map("circles")
+  @@schema("public")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model CircleParticipant {
+  id       String                @id @default(dbgenerated("app.uuidv7()")) @db.Uuid
+  circleId String                @map("circle_id") @db.Uuid
+  userId   String                @map("user_id") @db.Uuid
+  role     CircleParticipantRole @default(PARTICIPANT)
+  joinedAt DateTime              @default(now()) @map("joined_at") @db.Timestamptz(6)
+  leftAt   DateTime?             @map("left_at") @db.Timestamptz(6)
+
+  circle Circle @relation(fields: [circleId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([circleId, userId], map: "uq_circle_participants")
+  @@index([circleId], map: "idx_circle_participants_circle")
+  @@index([role], map: "idx_circle_participants_role")
+  @@index([userId], map: "idx_circle_participants_user")
+  @@map("circle_participants")
+  @@schema("public")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model CircleMessage {
+  id        String        @id @default(dbgenerated("app.uuidv7()")) @db.Uuid
+  circleId  String        @map("circle_id") @db.Uuid
+  authorId  String        @map("author_id") @db.Uuid
+  content   String
+  status    ContentStatus @default(PUBLISHED)
+  createdAt DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime      @default(now()) @map("updated_at") @db.Timestamptz(6)
+  deletedAt DateTime?     @map("deleted_at") @db.Timestamptz(6)
+
+  author User   @relation(fields: [authorId], references: [id], onUpdate: NoAction)
+  circle Circle @relation(fields: [circleId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([authorId, createdAt(sort: Desc)], map: "idx_circle_messages_author")
+  @@index([circleId, createdAt], map: "idx_circle_messages_circle_created")
+  @@index([status], map: "idx_circle_messages_status")
+  @@map("circle_messages")
+  @@schema("public")
+}
+
+// ============================================================================
+// SUPPORT LETTERS
+// ============================================================================
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model SupportLetter {
+  id        String        @id @default(dbgenerated("app.uuidv7()")) @db.Uuid
+  authorId  String?       @map("author_id") @db.Uuid
+  title     String
+  content   String
+  category  String?
+  anonymous Boolean       @default(true)
+  status    ContentStatus @default(PENDING_REVIEW)
+  createdAt DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime      @default(now()) @map("updated_at") @db.Timestamptz(6)
+
+  author     User?                   @relation(fields: [authorId], references: [id], onUpdate: NoAction)
+  deliveries SupportLetterDelivery[]
+
+  @@index([status, createdAt(sort: Desc)], map: "idx_letters_status_created")
+  @@map("support_letters")
+  @@schema("public")
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model SupportLetterDelivery {
+  id        String    @id @default(dbgenerated("app.uuidv7()")) @db.Uuid
+  letterId  String    @map("letter_id") @db.Uuid
+  userId    String    @map("user_id") @db.Uuid
+  openedAt  DateTime? @map("opened_at") @db.Timestamptz(6)
+  saved     Boolean   @default(false)
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  letter SupportLetter @relation(fields: [letterId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  user   User          @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([letterId, userId], map: "uq_letter_deliveries")
+  @@index([letterId], map: "idx_letter_deliveries_letter")
+  @@index([userId, createdAt(sort: Desc)], map: "idx_letter_deliveries_user")
+  @@map("support_letter_deliveries")
+  @@schema("public")
+}
+
+// ============================================================================
+// DISTRACTIONS & SAFETY
+// ============================================================================
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model DistractionPrompt {
+  id               String   @id @default(dbgenerated("app.uuidv7()")) @db.Uuid
+  title            String   @unique(map: "uq_distraction_prompts_title")
+  description      String
+  category         String
+  estimatedMinutes Int?     @map("estimated_minutes") @db.SmallInt
+  active           Boolean  @default(true)
+  createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime @default(now()) @map("updated_at") @db.Timestamptz(6)
+
+  completions DistractionCompletion[]
+
+  @@map("distraction_prompts")
+  @@schema("public")
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model DistractionCompletion {
+  id        String   @id @default(dbgenerated("app.uuidv7()")) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  promptId  String   @map("prompt_id") @db.Uuid
+  helped    Boolean?
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  user   User              @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  prompt DistractionPrompt @relation(fields: [promptId], references: [id], onUpdate: NoAction)
+
+  @@index([promptId], map: "idx_distraction_completions_prompt")
+  @@index([userId, createdAt(sort: Desc)], map: "idx_distraction_completions_user")
+  @@map("distraction_completions")
+  @@schema("public")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model SafetyResource {
   id          String   @id @default(dbgenerated("app.uuidv7()")) @db.Uuid
   title       String
   description String
@@ -428,154 +512,173 @@ model safety_resources {
   country     String   @default("BR")
   type        String?
   active      Boolean  @default(true)
-  created_at  DateTime @default(now()) @db.Timestamptz(6)
-  updated_at  DateTime @default(now()) @db.Timestamptz(6)
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime @default(now()) @map("updated_at") @db.Timestamptz(6)
 
   @@unique([title, country], map: "uq_safety_resources_title_country")
+  @@map("safety_resources")
+  @@schema("public")
+}
+
+// ============================================================================
+// MODERATION
+// ============================================================================
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model Report {
+  id          String           @id @default(dbgenerated("app.uuidv7()")) @db.Uuid
+  reporterId  String           @map("reporter_id") @db.Uuid
+  targetType  ReportTargetType @map("target_type")
+  targetId    String           @map("target_id") @db.Uuid
+  reason      String
+  description String?
+  status      ReportStatus     @default(OPEN)
+  riskLevel   RiskLevel        @default(LOW) @map("risk_level")
+  createdAt   DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime         @default(now()) @map("updated_at") @db.Timestamptz(6)
+  resolvedAt  DateTime?        @map("resolved_at") @db.Timestamptz(6)
+
+  reporter User               @relation(fields: [reporterId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  actions  ModerationAction[]
+
+  @@index([status, riskLevel, createdAt(sort: Desc)], map: "idx_reports_queue")
+  @@index([reporterId, createdAt(sort: Desc)], map: "idx_reports_reporter")
+  @@index([targetType, targetId], map: "idx_reports_target")
+  @@map("reports")
   @@schema("public")
 }
 
 /// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
 /// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
-model saved_items {
-  id          String          @id @default(dbgenerated("app.uuidv7()")) @db.Uuid
-  user_id     String          @db.Uuid
-  target_type saved_item_type
-  target_id   String          @db.Uuid
-  note        String?
-  created_at  DateTime        @default(now()) @db.Timestamptz(6)
-  users       users           @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+model ModerationAction {
+  id          String               @id @default(dbgenerated("app.uuidv7()")) @db.Uuid
+  moderatorId String               @map("moderator_id") @db.Uuid
+  targetType  ReportTargetType     @map("target_type")
+  targetId    String               @map("target_id") @db.Uuid
+  action      ModerationActionType
+  reason      String?
+  reportId    String?              @map("report_id") @db.Uuid
+  metadata    Json?
+  createdAt   DateTime             @default(now()) @map("created_at") @db.Timestamptz(6)
 
-  @@unique([user_id, target_type, target_id], map: "uq_saved_items")
-  @@index([target_type, target_id], map: "idx_saved_items_target")
-  @@index([user_id, created_at(sort: Desc)], map: "idx_saved_items_user")
-  @@schema("public")
-}
+  moderator User    @relation(fields: [moderatorId], references: [id], onUpdate: NoAction)
+  report    Report? @relation(fields: [reportId], references: [id], onUpdate: NoAction)
 
-/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
-model support_letter_deliveries {
-  id              String          @id @default(dbgenerated("app.uuidv7()")) @db.Uuid
-  letter_id       String          @db.Uuid
-  user_id         String          @db.Uuid
-  opened_at       DateTime?       @db.Timestamptz(6)
-  saved           Boolean         @default(false)
-  created_at      DateTime        @default(now()) @db.Timestamptz(6)
-  support_letters support_letters @relation(fields: [letter_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
-  users           users           @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
-
-  @@unique([letter_id, user_id], map: "uq_letter_deliveries")
-  @@index([letter_id], map: "idx_letter_deliveries_letter")
-  @@index([user_id, created_at(sort: Desc)], map: "idx_letter_deliveries_user")
+  @@index([action], map: "idx_mod_actions_action")
+  @@index([moderatorId, createdAt(sort: Desc)], map: "idx_mod_actions_moderator")
+  @@index([targetType, targetId], map: "idx_mod_actions_target")
+  @@map("moderation_actions")
   @@schema("public")
 }
 
 /// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
 /// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
-model support_letters {
-  id                        String                      @id @default(dbgenerated("app.uuidv7()")) @db.Uuid
-  author_id                 String?                     @db.Uuid
-  title                     String
-  content                   String
-  category                  String?
-  anonymous                 Boolean                     @default(true)
-  status                    content_status              @default(PENDING_REVIEW)
-  created_at                DateTime                    @default(now()) @db.Timestamptz(6)
-  updated_at                DateTime                    @default(now()) @db.Timestamptz(6)
-  support_letter_deliveries support_letter_deliveries[]
-  users                     users?                      @relation(fields: [author_id], references: [id], onUpdate: NoAction)
+model ContentFlag {
+  id         String           @id @default(dbgenerated("app.uuidv7()")) @db.Uuid
+  targetType ReportTargetType @map("target_type")
+  targetId   String           @map("target_id") @db.Uuid
+  flagType   String           @map("flag_type")
+  riskLevel  RiskLevel        @map("risk_level")
+  source     String
+  status     ReportStatus     @default(OPEN)
+  metadata   Json?
+  createdAt  DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt  DateTime         @default(now()) @map("updated_at") @db.Timestamptz(6)
 
-  @@index([status, created_at(sort: Desc)], map: "idx_letters_status_created")
+  @@index([riskLevel, status, createdAt(sort: Desc)], map: "idx_flags_queue")
+  @@index([source], map: "idx_flags_source")
+  @@index([targetType, targetId], map: "idx_flags_target")
+  @@map("content_flags")
   @@schema("public")
 }
 
+// ============================================================================
+// SAVED ITEMS, NOTIFICATIONS, ANALYTICS, AUDIT
+// ============================================================================
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
 /// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
-model user_preferences {
-  id                    String   @id @default(dbgenerated("app.uuidv7()")) @db.Uuid
-  user_id               String   @unique @db.Uuid
-  allow_advice_default  Boolean  @default(false)
-  anonymous_by_default  Boolean  @default(false)
-  show_sensitive_topics Boolean  @default(true)
-  receive_notifications Boolean  @default(true)
-  created_at            DateTime @default(now()) @db.Timestamptz(6)
-  updated_at            DateTime @default(now()) @db.Timestamptz(6)
-  users                 users    @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+model SavedItem {
+  id         String        @id @default(dbgenerated("app.uuidv7()")) @db.Uuid
+  userId     String        @map("user_id") @db.Uuid
+  targetType SavedItemType @map("target_type")
+  targetId   String        @map("target_id") @db.Uuid
+  note       String?
+  createdAt  DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
 
-  @@schema("public")
-}
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
 
-/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
-model user_roles {
-  id         String    @id @default(dbgenerated("app.uuidv7()")) @db.Uuid
-  user_id    String    @db.Uuid
-  role       user_role
-  created_at DateTime  @default(now()) @db.Timestamptz(6)
-  users      users     @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
-
-  @@unique([user_id, role], map: "uq_user_roles_user_role")
-  @@index([role], map: "idx_user_roles_role")
-  @@index([user_id], map: "idx_user_roles_user_id")
+  @@unique([userId, targetType, targetId], map: "uq_saved_items")
+  @@index([targetType, targetId], map: "idx_saved_items_target")
+  @@index([userId, createdAt(sort: Desc)], map: "idx_saved_items_user")
+  @@map("saved_items")
   @@schema("public")
 }
 
 /// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
 /// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
-model user_warnings {
-  id                                      String   @id @default(dbgenerated("app.uuidv7()")) @db.Uuid
-  user_id                                 String   @db.Uuid
-  moderator_id                            String?  @db.Uuid
-  reason                                  String
-  message                                 String?
-  created_at                              DateTime @default(now()) @db.Timestamptz(6)
-  users_user_warnings_moderator_idTousers users?   @relation("user_warnings_moderator_idTousers", fields: [moderator_id], references: [id], onUpdate: NoAction)
-  users_user_warnings_user_idTousers      users    @relation("user_warnings_user_idTousers", fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+model Notification {
+  id        String           @id @default(dbgenerated("app.uuidv7()")) @db.Uuid
+  userId    String           @map("user_id") @db.Uuid
+  type      NotificationType
+  title     String
+  body      String?
+  read      Boolean          @default(false)
+  data      Json?
+  createdAt DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
+  readAt    DateTime?        @map("read_at") @db.Timestamptz(6)
 
-  @@index([user_id, created_at(sort: Desc)], map: "idx_warnings_user")
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([type], map: "idx_notif_type")
+  @@index([userId, createdAt(sort: Desc)], map: "idx_notif_user_all")
+  @@map("notifications")
   @@schema("public")
 }
 
 /// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
-model users {
-  id                                                        String                      @id @db.Uuid
-  email                                                     String?                     @unique
-  status                                                    user_status                 @default(ACTIVE)
-  created_at                                                DateTime                    @default(now()) @db.Timestamptz(6)
-  updated_at                                                DateTime                    @default(now()) @db.Timestamptz(6)
-  deleted_at                                                DateTime?                   @db.Timestamptz(6)
-  analytics_events                                          analytics_events[]
-  audit_logs                                                audit_logs[]
-  blocks_blocks_blocked_idTousers                           blocks[]                    @relation("blocks_blocked_idTousers")
-  blocks_blocks_blocker_idTousers                           blocks[]                    @relation("blocks_blocker_idTousers")
-  check_ins                                                 check_ins[]
-  circle_messages                                           circle_messages[]
-  circle_participants                                       circle_participants[]
-  circles                                                   circles[]
-  comment_reactions                                         comment_reactions[]
-  comments                                                  comments[]
-  diary_entries                                             diary_entries[]
-  distraction_completions                                   distraction_completions[]
-  listener_availabilities                                   listener_availabilities?
-  moderation_actions                                        moderation_actions[]
-  notifications                                             notifications[]
-  post_reactions                                            post_reactions[]
-  posts                                                     posts[]
-  presence_requests_presence_requests_accepted_by_idTousers presence_requests[]         @relation("presence_requests_accepted_by_idTousers")
-  presence_requests_presence_requests_requester_idTousers   presence_requests[]         @relation("presence_requests_requester_idTousers")
-  profiles                                                  profiles?
-  reports                                                   reports[]
-  saved_items                                               saved_items[]
-  support_letter_deliveries                                 support_letter_deliveries[]
-  support_letters                                           support_letters[]
-  user_preferences                                          user_preferences?
-  user_roles                                                user_roles[]
-  user_warnings_user_warnings_moderator_idTousers           user_warnings[]             @relation("user_warnings_moderator_idTousers")
-  user_warnings_user_warnings_user_idTousers                user_warnings[]             @relation("user_warnings_user_idTousers")
+model AnalyticsEvent {
+  id        String             @id @default(dbgenerated("app.uuidv7()")) @db.Uuid
+  userId    String?            @map("user_id") @db.Uuid
+  type      AnalyticsEventType
+  metadata  Json?
+  createdAt DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
 
-  @@index([created_at(sort: Desc)], map: "idx_users_created_at")
-  @@index([status], map: "idx_users_status")
+  user User? @relation(fields: [userId], references: [id], onUpdate: NoAction)
+
+  @@index([type, createdAt(sort: Desc)], map: "idx_analytics_type_created")
+  @@map("analytics_events")
   @@schema("public")
 }
 
-enum analytics_event_type {
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model AuditLog {
+  id        String   @id @default(dbgenerated("app.uuidv7()")) @db.Uuid
+  actorId   String?  @map("actor_id") @db.Uuid
+  action    String
+  entity    String
+  entityId  String?  @map("entity_id") @db.Uuid
+  metadata  Json?
+  ipAddress String?  @map("ip_address")
+  userAgent String?  @map("user_agent")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  actor User? @relation(fields: [actorId], references: [id], onUpdate: NoAction)
+
+  @@index([action], map: "idx_audit_action")
+  @@index([createdAt(sort: Desc)], map: "idx_audit_created")
+  @@index([entity, entityId], map: "idx_audit_entity")
+  @@map("audit_logs")
+  @@schema("public")
+}
+
+// ============================================================================
+// ENUMS
+// ============================================================================
+
+enum AnalyticsEventType {
   CHECKIN_CREATED
   POST_CREATED
   COMMENT_CREATED
@@ -588,18 +691,20 @@ enum analytics_event_type {
   PRESENCE_REQUEST_CREATED
   PRESENCE_REQUEST_ACCEPTED
 
+  @@map("analytics_event_type")
   @@schema("public")
 }
 
-enum circle_participant_role {
+enum CircleParticipantRole {
   PARTICIPANT
   FACILITATOR
   MODERATOR
 
+  @@map("circle_participant_role")
   @@schema("public")
 }
 
-enum circle_status {
+enum CircleStatus {
   SCHEDULED
   OPEN
   IN_PROGRESS
@@ -607,20 +712,22 @@ enum circle_status {
   CLOSED
   CANCELLED
 
+  @@map("circle_status")
   @@schema("public")
 }
 
-enum comment_response_type {
+enum CommentResponseType {
   VALIDATION
   QUESTION
   SHARED_EXPERIENCE
   DISTRACTION
   PRESENCE
 
+  @@map("comment_response_type")
   @@schema("public")
 }
 
-enum content_status {
+enum ContentStatus {
   DRAFT
   PUBLISHED
   PENDING_REVIEW
@@ -628,10 +735,11 @@ enum content_status {
   REMOVED
   DELETED
 
+  @@map("content_status")
   @@schema("public")
 }
 
-enum emotional_state {
+enum EmotionalState {
   CALM
   ANXIOUS
   SAD
@@ -641,10 +749,11 @@ enum emotional_state {
   NUMB
   UNSURE
 
+  @@map("emotional_state")
   @@schema("public")
 }
 
-enum moderation_action_type {
+enum ModerationActionType {
   HIDE_CONTENT
   REMOVE_CONTENT
   RESTORE_CONTENT
@@ -654,10 +763,11 @@ enum moderation_action_type {
   DISMISS_REPORT
   ESCALATE_REPORT
 
+  @@map("moderation_action_type")
   @@schema("public")
 }
 
-enum need_type {
+enum NeedType {
   VENT
   BE_HEARD
   ADVICE
@@ -668,10 +778,11 @@ enum need_type {
   READ_SUPPORT
   URGENT_SUPPORT
 
+  @@map("need_type")
   @@schema("public")
 }
 
-enum notification_type {
+enum NotificationType {
   POST_COMMENTED
   POST_REACTED
   CIRCLE_STARTED
@@ -680,10 +791,11 @@ enum notification_type {
   SUPPORT_LETTER_RECEIVED
   SYSTEM
 
+  @@map("notification_type")
   @@schema("public")
 }
 
-enum post_intent {
+enum PostIntent {
   JUST_LISTEN
   ADVICE
   SIMILAR_STORIES
@@ -691,20 +803,22 @@ enum post_intent {
   SUPPORT_NOW
   JUST_VENT
 
+  @@map("post_intent")
   @@schema("public")
 }
 
-enum presence_request_status {
+enum PresenceRequestStatus {
   OPEN
   ACCEPTED
   EXPIRED
   CANCELLED
   CLOSED
 
+  @@map("presence_request_status")
   @@schema("public")
 }
 
-enum reaction_type {
+enum ReactionType {
   READ_WITH_CARE
   WITH_YOU
   I_RELATE
@@ -712,62 +826,69 @@ enum reaction_type {
   HELPED_ME
   YOU_WERE_HEARD
 
+  @@map("reaction_type")
   @@schema("public")
 }
 
-enum report_status {
+enum ReportStatus {
   OPEN
   IN_REVIEW
   RESOLVED
   DISMISSED
   ESCALATED
 
+  @@map("report_status")
   @@schema("public")
 }
 
-enum report_target_type {
+enum ReportTargetType {
   POST
   COMMENT
   USER
   CIRCLE_MESSAGE
 
+  @@map("report_target_type")
   @@schema("public")
 }
 
-enum risk_level {
+enum RiskLevel {
   LOW
   MEDIUM
   HIGH
   CRITICAL
 
+  @@map("risk_level")
   @@schema("public")
 }
 
-enum saved_item_type {
-  POST
-  COMMENT
-  SUPPORT_LETTER
-  DISTRACTION_PROMPT
-  CIRCLE_MESSAGE
-
-  @@schema("public")
-}
-
-enum user_role {
+enum Role {
   USER
   LISTENER
   FACILITATOR
   MODERATOR
   ADMIN
 
+  @@map("user_role")
   @@schema("public")
 }
 
-enum user_status {
+enum SavedItemType {
+  POST
+  COMMENT
+  SUPPORT_LETTER
+  DISTRACTION_PROMPT
+  CIRCLE_MESSAGE
+
+  @@map("saved_item_type")
+  @@schema("public")
+}
+
+enum UserStatus {
   ACTIVE
   SUSPENDED
   BANNED
   DELETED
 
+  @@map("user_status")
   @@schema("public")
 }
