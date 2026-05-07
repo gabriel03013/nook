@@ -100,7 +100,7 @@ because i learn better that way.
 - [x] shared types and Zod schemas
 - [x] API scaffolding (NestJS, health check)
 - [x] linting & formatting (ESLint 9 flat + Prettier)
-- [ ] Prisma client generation
+- [x] Prisma client generation
 - [ ] auth module (Supabase JWT verification + user sync)
 - [ ] check-in flow (the entry point of the product)
 - [ ] vent / listen module
