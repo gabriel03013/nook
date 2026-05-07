@@ -1,7 +1,7 @@
 import { Controller, Get, HttpCode, HttpStatus, Post } from '@nestjs/common';
 import { z } from 'zod';
 
-import { AppService } from './app.service';
+import { AppService, HealthCheck } from './app.service';
 import { ZodBody } from './common';
 
 // Tiny schema used only by the /echo endpoint below.
@@ -20,7 +20,7 @@ export class AppController {
   constructor(private readonly appService: AppService) {}
 
   @Get('health')
-  health(): { status: string; timestamp: string } {
+  health(): Promise<HealthCheck> {
     return this.appService.getHealth();
   }
 
