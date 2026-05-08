@@ -1,0 +1,9 @@
+# build outputs
+.next/
+out/
+
+# typescript incremental
+*.tsbuildinfo
+
+# env files (when they exist)
+.env*.local
