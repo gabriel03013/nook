@@ -1,19 +1,13 @@
 // Placeholder landing page.
-// Visual identity (palette, typography, layout) is being explored separately
-// and will land in a follow-up PR alongside Tailwind v4 + design tokens.
-// Inline styles here are intentional and TEMPORARY.
+// Real product pages (abrigo, sussurros, diário) come in follow-up PRs.
+// This page exists only to verify that:
+//   - Tailwind v4 is wired and emitting utility classes
+//   - Design tokens (bg-surface, text-content) resolve correctly
+//   - Manrope is loaded and applied as the default sans
 export default function HomePage() {
   return (
-    <main
-      style={{
-        minHeight: '100vh',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        fontFamily: 'system-ui, -apple-system, sans-serif',
-      }}
-    >
-      <h1 style={{ fontSize: '2rem', fontWeight: 400, letterSpacing: '-0.02em' }}>
+    <main className="flex min-h-screen items-center justify-center bg-surface">
+      <h1 className="text-4xl font-light tracking-tight text-content">
         nook
       </h1>
     </main>
