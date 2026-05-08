@@ -1,0 +1,131 @@
+name: CI
+
+# Run on every PR targeting main, and on every push to main itself
+# (catches anything that slipped through, e.g. force-push or merge issues).
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+# If a new commit lands on the same PR/branch while a workflow is still
+# running, kill the older run — only the latest matters.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+# Lock down default permissions: workflows only get read access to the repo.
+# Specific jobs can opt into more if needed (none do, for now).
+permissions:
+  contents: read
+
+jobs:
+  # ──────────────────────────────────────────────────────────────────────
+  # Lint — ESLint across all apps and packages
+  # ──────────────────────────────────────────────────────────────────────
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.2
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Generate Prisma Client
+        # Lint references @prisma/client types — without `generate`,
+        # tsc-backed eslint rules error out on missing types.
+        run: pnpm --filter @nook/database exec prisma generate
+
+      - name: Run ESLint
+        run: pnpm lint
+
+  # ──────────────────────────────────────────────────────────────────────
+  # Typecheck — tsc --noEmit across all packages
+  # ──────────────────────────────────────────────────────────────────────
+  typecheck:
+    name: Typecheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.2
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Generate Prisma Client
+        run: pnpm --filter @nook/database exec prisma generate
+
+      - name: Run typecheck
+        run: pnpm typecheck
+
+  # ──────────────────────────────────────────────────────────────────────
+  # Test — unit tests (Jest, no DB)
+  # ──────────────────────────────────────────────────────────────────────
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.2
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Generate Prisma Client
+        run: pnpm --filter @nook/database exec prisma generate
+
+      - name: Run tests
+        run: pnpm --filter @nook/api test
+
+  # ──────────────────────────────────────────────────────────────────────
+  # Build — confirm everything compiles
+  # ──────────────────────────────────────────────────────────────────────
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.2
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Generate Prisma Client
+        run: pnpm --filter @nook/database exec prisma generate
+
+      - name: Run build
+        run: pnpm build
