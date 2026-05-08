@@ -101,6 +101,8 @@ because i learn better that way.
 - [x] API scaffolding (NestJS, health check)
 - [x] linting & formatting (ESLint 9 flat + Prettier)
 - [x] Prisma client generation
+- [x] typed config layer (Zod-validated env vars, fail-fast on boot)
+- [x] Prisma wired into NestJS (lifecycle hooks, DB-aware health check)
 - [ ] auth module (Supabase JWT verification + user sync)
 - [ ] check-in flow (the entry point of the product)
 - [ ] vent / listen module
