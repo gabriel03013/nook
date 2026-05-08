@@ -12,14 +12,14 @@ export const UserStatus = z.enum([
 ]);
 export type UserStatus = z.infer<typeof UserStatus>;
 
-export const UserRole = z.enum([
+export const Role = z.enum([
   'USER',
   'LISTENER',
   'FACILITATOR',
   'MODERATOR',
   'ADMIN',
 ]);
-export type UserRole = z.infer<typeof UserRole>;
+export type Role = z.infer<typeof Role>;
 
 export const EmotionalState = z.enum([
   'CALM',
