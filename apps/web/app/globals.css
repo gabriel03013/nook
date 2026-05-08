@@ -1,0 +1,74 @@
+/* =========================================================================
+ * @nook/web — global styles
+ * =========================================================================
+ *
+ * Tailwind v4 lives entirely in CSS now (no JS config file).
+ *
+ * Naming convention:
+ *   - Primitive tokens (--color-bg, --color-moss…) describe RAW values.
+ *     Never use them directly in components.
+ *   - Semantic tokens (--color-surface, --color-content…) describe PURPOSE.
+ *     Components reference these. If we ever swap a raw value, only the
+ *     mapping below needs to change.
+ *
+ * Concept: "Abrigo na Penumbra".
+ *   - Dark warm-neutral surfaces (no blue undertone)
+ *   - Two desaturated warm accents (Moss + Clay)
+ *   - 4-step text hierarchy, all sharing the same ivory undertone
+ * ========================================================================= */
+
+@import 'tailwindcss';
+
+@theme {
+  /* ---------- raw color tokens (primitives) ------------------------------ */
+
+  /* surfaces */
+  --color-bg: #131313;
+  --color-card: #1c1b1b;
+  --color-hover: #20201f;
+
+  /* text hierarchy (warm, ivory undertone) */
+  --color-text-high: #d2cfc1;
+  --color-text-mid: #a6a398;
+  --color-text-low: #5e5c56;
+  --color-text-mute: #393939;
+
+  /* accents (desaturated warm) */
+  --color-moss: #5e6d5e;
+  --color-clay: #8c7a6b;
+
+  /* ---------- semantic color tokens (use these in components) ----------- */
+
+  --color-surface: var(--color-bg);
+  --color-surface-card: var(--color-card);
+  --color-surface-hover: var(--color-hover);
+
+  --color-content: var(--color-text-high);
+  --color-content-muted: var(--color-text-mid);
+  --color-content-subtle: var(--color-text-low);
+  --color-content-disabled: var(--color-text-mute);
+
+  --color-accent-primary: var(--color-moss);
+  --color-accent-secondary: var(--color-clay);
+
+  /* divider uses 10% alpha of text-high — it breathes better across
+   * different surfaces than a flat hex would. */
+  --color-divider: rgb(from var(--color-text-high) r g b / 0.1);
+
+  /* ---------- typography ------------------------------------------------- */
+
+  /* Manrope is plugged via next/font/google in app/layout.tsx, which sets
+   * the --font-manrope CSS variable. We just point Tailwind's default sans
+   * stack at it so every text element inherits Manrope automatically. */
+  --font-sans: var(--font-manrope), ui-sans-serif, system-ui, sans-serif;
+}
+
+/* ---------- base layer overrides ----------------------------------------- */
+
+/* Apply the dark surface to the whole document so the page never flashes
+ * a white background while React hydrates. */
+html,
+body {
+  background-color: var(--color-surface);
+  color: var(--color-content);
+}
